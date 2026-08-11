@@ -56,3 +56,30 @@ export interface ProcessedGame {
   opening: string | null;
   accuracy: number | null;
 }
+
+// ─── Blunder / PGN Parser Types ──────────────────────────────────────────────
+
+export interface ParsedMove {
+  moveNumber: number;
+  color: PlayerColor;
+  notation: string;
+  /** Eval in pawns AFTER this move (from White's perspective), null if no [%eval] tag. */
+  evalAfter: number | null;
+  isMate: boolean;
+  mateIn: number | null;
+  hasDoubleMark: boolean;
+}
+
+export interface Blunder {
+  moveNumber: number;
+  color: PlayerColor;
+  notation: string;
+  /** Eval before this move (pawns, White's perspective). */
+  evalBefore: number | null;
+  /** Eval after this move (pawns, White's perspective). */
+  evalAfter: number | null;
+  /** Magnitude of eval drop from the blundering player's POV (positive = worse). */
+  evalDrop: number | null;
+  reason: 'annotation' | 'eval_drop' | 'annotation_and_eval';
+  description: string;
+}

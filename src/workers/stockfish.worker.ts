@@ -12,7 +12,6 @@
  *   { type: 'ready' }
  */
 
-const MATE_SENTINEL = 9999;
 
 interface AnalyzeMessage {
   type: 'analyze';
@@ -21,6 +20,8 @@ interface AnalyzeMessage {
 }
 
 // Load Stockfish WASM script into this Worker scope
+// eslint-disable-next-line no-var
+declare function importScripts(...urls: string[]): void;
 importScripts('/stockfish.js');
 
 declare function Stockfish(): Promise<StockfishInstance>;

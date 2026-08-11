@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ProcessedGame } from '../types/chess';
 import { fetchArchives, fetchMonthlyGames, processGame, USERNAME } from '../utils/chessApi';
 import { analyzePgn, type AnalyzedBlunder } from '../utils/gameAnalyzer';

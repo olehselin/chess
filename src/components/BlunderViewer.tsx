@@ -42,7 +42,7 @@ interface ReasonBadgeProps {
 }
 
 const ReasonBadge: React.FC<ReasonBadgeProps> = ({ reason }) => {
-  const config = {
+  const configs = {
     annotation: {
       label: '?? Annotation',
       className: 'bg-rose-500/20 text-rose-300 border border-rose-500/40',
@@ -55,7 +55,8 @@ const ReasonBadge: React.FC<ReasonBadgeProps> = ({ reason }) => {
       label: '?? + 📉 Double',
       className: 'bg-rose-600/25 text-rose-200 border border-rose-500/60',
     },
-  }[reason];
+  } as const;
+  const config = configs[reason];
 
   return (
     <span
@@ -208,9 +209,6 @@ const StatsBar: React.FC<StatsBarProps> = ({ blunders }) => {
   const black = blunders.filter((b) => b.color === 'black').length;
   const annotated = blunders.filter(
     (b) => b.reason === 'annotation' || b.reason === 'annotation_and_eval',
-  ).length;
-  const evalDrop = blunders.filter(
-    (b) => b.reason === 'eval_drop' || b.reason === 'annotation_and_eval',
   ).length;
 
   const Stat: React.FC<{ label: string; value: number; accent?: string }> = ({

@@ -88,9 +88,6 @@ export function extractMovesFromPgn(pgn: string): Omit<MoveEval, 'evalCp' | 'mat
   // Let's recalculate properly
   // Reset and redo
   result.length = 0;
-  const chess2 = new Chess();
-  const history2 = chess.history({ verbose: true });
-  
   // Re-extract from original loaded chess
   const originalChess = new Chess();
   originalChess.loadPgn(pgn);
