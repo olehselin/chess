@@ -354,10 +354,9 @@ const StatsHeader: React.FC<{
     label: string;
     icon: string;
     iconCls: string;
-    accentCls: string;
     stats: ReturnType<typeof calcStats>;
     count: number;
-  }> = ({ label, icon, iconCls, accentCls, stats, count }) =>
+  }> = ({ label, icon, iconCls, stats, count }) =>
     count === 0 ? null : (
       <div className={`flex-1 rounded-2xl border border-white/[0.05] bg-slate-900/70 p-4 min-w-[160px]`}>
         {/* Header */}
