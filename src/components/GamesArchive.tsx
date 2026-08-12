@@ -558,6 +558,67 @@ export const GamesArchive: React.FC = () => {
     return { done, total: vals.length };
   }, [analysisMap]);
 
+  // ── Background multi-month queue
+  // Runs silently after the current month is fully analysed.
+  // Fetches each other archive, checks Firestore, and runs Stockfish only for uncached games.
+  const bgQueueRunningRef = useRef(false);
+  const [bgArchiveLabel, setBgArchiveLabel] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Only start when current month is fully done
+    const currentDone =
+      autoProgress !== null &&
+      autoProgress.done === autoProgress.total &&
+      autoProgress.total > 0;
+    if (!currentDone || sfStatus !== 'ready') return;
+    if (bgQueueRunningRef.current) return;
+    if (archives.length <= 1) return;
+
+    const myGen = runGenRef.current;
+    const others = [...archives].reverse().filter((a) => a !== selectedArchive);
+    if (others.length === 0) return;
+
+    bgQueueRunningRef.current = true;
+
+    (async () => {
+      try {
+        for (const archive of others) {
+          if (myGen !== runGenRef.current) break;
+
+          // Show which archive we're working on
+          const label = archiveLabel(archive);
+          setBgArchiveLabel(label);
+
+          const games = await fetchMonthlyGames(archive).catch(() => []);
+
+          for (const game of games) {
+            if (myGen !== runGenRef.current) break;
+
+            const processed = processGame(game);
+            const cached = await loadCachedAnalysis(processed.url);
+            if (cached) continue; // already in Firestore — skip
+
+            if (myGen !== runGenRef.current) break;
+
+            const { blunders, aborted } = await analyzePgn(
+              game.pgn,
+              evaluate,
+              undefined,
+              () => myGen === runGenRef.current,
+            );
+
+            if (!aborted && myGen === runGenRef.current) {
+              saveCachedAnalysis(processed.url, blunders);
+            }
+          }
+        }
+      } finally {
+        bgQueueRunningRef.current = false;
+        setBgArchiveLabel(null);
+      }
+    })();
+  }, [autoProgress, sfStatus, archives, selectedArchive, evaluate]);
+
   // ── Filter + sort
   const filteredGames = useMemo(() => {
     let list = [...rawGames];
@@ -622,7 +683,7 @@ export const GamesArchive: React.FC = () => {
             </span>
           </div>
 
-          {/* Auto-analysis progress */}
+          {/* Auto-analysis progress for current month */}
           {autoProgress !== null && autoProgress.done < autoProgress.total && sfStatus === 'ready' && (
             <div className="flex items-center gap-2 text-xs text-slate-500">
               <div className="h-1 w-20 rounded-full bg-slate-800 overflow-hidden">
@@ -634,8 +695,16 @@ export const GamesArchive: React.FC = () => {
               <span className="tabular-nums">{autoProgress.done}/{autoProgress.total}</span>
             </div>
           )}
-          {autoProgress !== null && autoProgress.done === autoProgress.total && autoProgress.total > 0 && (
+          {autoProgress !== null && autoProgress.done === autoProgress.total && autoProgress.total > 0 && !bgArchiveLabel && (
             <span className="text-xs text-emerald-500/80">✓ Аналіз завершено</span>
+          )}
+
+          {/* Background multi-month progress */}
+          {bgArchiveLabel && (
+            <div className="flex items-center gap-1.5 text-xs text-slate-600">
+              <div className="h-1.5 w-1.5 rounded-full bg-slate-600 animate-pulse" />
+              <span className="truncate max-w-[120px]">{bgArchiveLabel}</span>
+            </div>
           )}
 
           <div className="flex-1" />
