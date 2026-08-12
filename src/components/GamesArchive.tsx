@@ -446,7 +446,6 @@ const StatsHeader: React.FC<{
             label="Rapid"
             icon="⏱"
             iconCls="text-blue-400"
-            accentCls="border-blue-500/20"
             stats={rapidStats}
             count={rapidGames.length}
           />
@@ -454,7 +453,6 @@ const StatsHeader: React.FC<{
             label="Blitz"
             icon="⚡"
             iconCls="text-amber-400"
-            accentCls="border-amber-500/20"
             stats={blitzStats}
             count={blitzGames.length}
           />
