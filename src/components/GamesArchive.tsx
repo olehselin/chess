@@ -345,107 +345,155 @@ const StatsHeader: React.FC<{
   const rapidStats = calcStats(rapidGames);
   const blitzStats = calcStats(blitzGames);
 
-  // Overall row (all games, no blunder breakdown)
-  const totalWins = games.filter((g) => g.result === 'win').length;
+  // Overall totals
+  const totalWins   = games.filter((g) => g.result === 'win').length;
   const totalLosses = games.filter((g) => g.result === 'loss').length;
-  const totalDraws = games.filter((g) => g.result === 'draw').length;
+  const totalDraws  = games.filter((g) => g.result === 'draw').length;
+  const winPct      = games.length > 0 ? Math.round((totalWins / games.length) * 100) : 0;
+  const lossPct     = games.length > 0 ? Math.round((totalLosses / games.length) * 100) : 0;
+  const drawPct     = games.length > 0 ? (100 - winPct - lossPct) : 0;
 
   const TimeCard: React.FC<{
     label: string;
     icon: string;
     iconCls: string;
+    ringCls: string;           // tailwind colour for the big ring
     stats: ReturnType<typeof calcStats>;
     count: number;
-  }> = ({ label, icon, iconCls, stats, count }) =>
-    count === 0 ? null : (
-      <div className={`flex-1 rounded-2xl border border-white/[0.05] bg-slate-900/70 p-4 min-w-[160px]`}>
-        {/* Header */}
-        <div className="flex items-center gap-1.5 mb-3">
-          <span className={`text-sm ${iconCls}`}>{icon}</span>
-          <span className="text-xs font-semibold text-slate-300">{label}</span>
-          <span className="ml-auto text-[10px] text-slate-600 font-mono">{count} партій</span>
+  }> = ({ label, icon, iconCls, ringCls, stats, count }) => {
+    if (count === 0) return null;
+    const wp  = Math.round((stats.wins   / count) * 100);
+    const lp  = Math.round((stats.losses / count) * 100);
+    const dp  = 100 - wp - lp;
+    const avgNum = stats.avgBlunders !== null ? parseFloat(stats.avgBlunders) : null;
+    const blunderCls =
+      avgNum === null ? 'text-slate-500' :
+      avgNum === 0    ? 'text-emerald-400' :
+      avgNum < 1      ? 'text-amber-400' :
+                        'text-rose-400';
+
+    return (
+      <div className="flex-1 rounded-2xl border border-white/[0.06] bg-slate-900/80 p-4 min-w-0 space-y-3">
+        {/* ── Header ── */}
+        <div className="flex items-center gap-2">
+          <span className={`text-base leading-none ${iconCls}`}>{icon}</span>
+          <span className="text-sm font-bold text-slate-200">{label}</span>
+          <span className="ml-auto rounded-full bg-white/[0.05] px-2 py-0.5 text-[10px] text-slate-500 font-mono">
+            {count} партій
+          </span>
         </div>
 
-        {/* Results row */}
-        <div className="grid grid-cols-3 gap-1 mb-3">
-          {[
-            { val: stats.wins, lbl: 'Перемог', cls: 'text-emerald-400' },
-            { val: stats.losses, lbl: 'Поразок', cls: 'text-rose-400' },
-            { val: stats.draws, lbl: 'Нічиїх', cls: 'text-slate-400' },
-          ].map(({ val, lbl, cls }) => (
-            <div key={lbl} className="rounded-xl bg-white/[0.03] py-2 text-center">
-              <div className={`text-lg font-extrabold leading-none ${cls}`}>{val}</div>
-              <div className="text-[9px] text-slate-600 mt-0.5">{lbl}</div>
-            </div>
-          ))}
+        {/* ── Big win-% + segmented bar ── */}
+        <div>
+          {/* Large percentage */}
+          <div className="flex items-end gap-1.5 mb-2">
+            <span className={`text-3xl font-black leading-none ${ringCls}`}>{wp}%</span>
+            <span className="text-[10px] text-slate-600 mb-0.5">перемог</span>
+          </div>
+
+          {/* Segmented stacked bar */}
+          <div className="h-2.5 rounded-full overflow-hidden flex gap-px bg-slate-800">
+            {wp > 0 && (
+              <div
+                className="bg-emerald-500/80 h-full rounded-l-full transition-all duration-700"
+                style={{ width: `${wp}%` }}
+              />
+            )}
+            {dp > 0 && (
+              <div
+                className="bg-slate-600/60 h-full transition-all duration-700"
+                style={{ width: `${dp}%` }}
+              />
+            )}
+            {lp > 0 && (
+              <div
+                className="bg-rose-500/60 h-full rounded-r-full transition-all duration-700"
+                style={{ width: `${lp}%` }}
+              />
+            )}
+          </div>
+
+          {/* Legend */}
+          <div className="flex justify-between mt-1.5 text-[9px] font-mono">
+            <span className="text-emerald-400/80">✓ {stats.wins} ({wp}%)</span>
+            <span className="text-slate-600">≈ {stats.draws} ({dp}%)</span>
+            <span className="text-rose-400/80">✗ {stats.losses} ({lp}%)</span>
+          </div>
         </div>
 
-        {/* Win-rate bar */}
-        <div className="mb-3">
-          <div className="flex justify-between mb-1">
-            <span className="text-[9px] text-slate-600">В/П/Н</span>
-            <span className="text-[9px] text-slate-500 font-mono">
-              {count > 0 ? Math.round((stats.wins / count) * 100) : 0}% перемог
+        {/* ── Blunders row ── */}
+        <div className="flex gap-2">
+          {/* Total */}
+          <div className="flex-1 rounded-xl bg-white/[0.03] border border-white/[0.04] px-3 py-2.5 flex flex-col gap-0.5">
+            <span className="text-[9px] text-slate-600 uppercase tracking-wider">Зівків</span>
+            <span className={`text-xl font-extrabold leading-none ${blunderCls}`}>
+              {stats.analysedCount > 0 ? stats.totalBlunders : '—'}
             </span>
           </div>
-          <div className="h-1.5 rounded-full bg-slate-800 overflow-hidden flex">
-            <div
-              className="bg-emerald-500/70 h-full transition-all duration-700"
-              style={{ width: `${count > 0 ? (stats.wins / count) * 100 : 0}%` }}
-            />
-            <div
-              className="bg-slate-500/50 h-full transition-all duration-700"
-              style={{ width: `${count > 0 ? (stats.draws / count) * 100 : 0}%` }}
-            />
-            <div
-              className="bg-rose-500/50 h-full transition-all duration-700"
-              style={{ width: `${count > 0 ? (stats.losses / count) * 100 : 0}%` }}
-            />
-          </div>
-        </div>
-
-        {/* Blunders */}
-        <div className={`rounded-xl border border-white/[0.04] bg-white/[0.02] px-3 py-2 flex items-center justify-between`}>
-          <div>
-            <div className="text-[9px] text-slate-600 mb-0.5">Зівки (твої)</div>
-            <div className={`text-base font-extrabold leading-none ${stats.totalBlunders > 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
-              {stats.analysedCount > 0 ? stats.totalBlunders : '—'}
-            </div>
-          </div>
-          <div className="text-right">
-            <div className="text-[9px] text-slate-600 mb-0.5">Сер./партія</div>
-            <div className="text-base font-extrabold leading-none text-slate-300">
+          {/* Average */}
+          <div className="flex-1 rounded-xl bg-white/[0.03] border border-white/[0.04] px-3 py-2.5 flex flex-col gap-0.5">
+            <span className="text-[9px] text-slate-600 uppercase tracking-wider">Сер./гра</span>
+            <span className={`text-xl font-extrabold leading-none ${blunderCls}`}>
               {stats.avgBlunders ?? '—'}
-            </div>
+            </span>
+          </div>
+          {/* Analyzed count */}
+          <div className="flex-1 rounded-xl bg-white/[0.03] border border-white/[0.04] px-3 py-2.5 flex flex-col gap-0.5">
+            <span className="text-[9px] text-slate-600 uppercase tracking-wider">Аналіз</span>
+            <span className="text-xl font-extrabold leading-none text-slate-400">
+              {stats.analysedCount}/{count}
+            </span>
           </div>
         </div>
       </div>
     );
+  };
 
   return (
     <div className="mb-5 space-y-3">
-      {/* Compact overall row */}
-      <div className="grid grid-cols-4 gap-px overflow-hidden rounded-2xl border border-white/[0.05] bg-white/[0.02]">
-        {[
-          { label: 'Партій', value: games.length, color: 'text-white' },
-          { label: 'Перемог', value: totalWins, color: 'text-emerald-400' },
-          { label: 'Поразок', value: totalLosses, color: 'text-rose-400' },
-          { label: 'Нічиїх', value: totalDraws, color: 'text-slate-400' },
-        ].map(({ label, value, color }) => (
-          <div key={label} className="bg-slate-900/80 px-4 py-3 text-center">
-            <div className={`text-2xl font-extrabold ${color}`}>{value}</div>
-            <div className="text-xs text-slate-600 mt-0.5">{label}</div>
+      {/* ── Overall summary header ── */}
+      <div className="rounded-2xl border border-white/[0.06] bg-slate-900/80 px-5 py-4">
+        <div className="flex items-center gap-4 flex-wrap">
+          {/* Big total */}
+          <div className="flex flex-col items-center min-w-[48px]">
+            <span className="text-3xl font-black text-white leading-none">{games.length}</span>
+            <span className="text-[10px] text-slate-600 mt-0.5">Партій</span>
           </div>
-        ))}
+
+          <div className="w-px h-8 bg-white/[0.06] flex-shrink-0" />
+
+          {/* Stacked bar + stats */}
+          <div className="flex-1 min-w-[160px]">
+            {/* Bar */}
+            <div className="h-2.5 rounded-full overflow-hidden flex gap-px bg-slate-800 mb-1.5">
+              {winPct > 0 && (
+                <div className="bg-emerald-500/80 h-full rounded-l-full transition-all duration-700" style={{ width: `${winPct}%` }} />
+              )}
+              {drawPct > 0 && (
+                <div className="bg-slate-600/60 h-full transition-all duration-700" style={{ width: `${drawPct}%` }} />
+              )}
+              {lossPct > 0 && (
+                <div className="bg-rose-500/60 h-full rounded-r-full transition-all duration-700" style={{ width: `${lossPct}%` }} />
+              )}
+            </div>
+            {/* Labels */}
+            <div className="flex gap-4 text-[10px] font-mono">
+              <span className="text-emerald-400"><span className="font-bold">{totalWins}</span> виграшів ({winPct}%)</span>
+              <span className="text-slate-500"><span className="font-bold">{totalDraws}</span> нічиїх ({drawPct}%)</span>
+              <span className="text-rose-400"><span className="font-bold">{totalLosses}</span> поразок ({lossPct}%)</span>
+            </div>
+          </div>
+        </div>
       </div>
 
-      {/* Per-time-class cards */}
+      {/* ── Per-time-class cards ── */}
       {(rapidGames.length > 0 || blitzGames.length > 0) && (
         <div className="flex gap-3">
           <TimeCard
             label="Rapid"
             icon="⏱"
             iconCls="text-blue-400"
+            ringCls="text-blue-400"
             stats={rapidStats}
             count={rapidGames.length}
           />
@@ -453,6 +501,7 @@ const StatsHeader: React.FC<{
             label="Blitz"
             icon="⚡"
             iconCls="text-amber-400"
+            ringCls="text-amber-400"
             stats={blitzStats}
             count={blitzGames.length}
           />
