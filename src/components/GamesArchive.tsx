@@ -3,6 +3,7 @@ import type { ProcessedGame } from '../types/chess';
 import { fetchArchives, fetchMonthlyGames, processGame, USERNAME } from '../utils/chessApi';
 import { analyzePgn, type AnalyzedBlunder } from '../utils/gameAnalyzer';
 import { useStockfish } from '../hooks/useStockfish';
+import { loadCachedAnalysis, saveCachedAnalysis } from '../utils/analysisCache';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -416,31 +417,50 @@ export const GamesArchive: React.FC = () => {
   // ── Load games when selected archive changes
   useEffect(() => {
     if (!selectedArchive) return;
-    setLoadingGames(true);
-    setRawGames([]);
-    setAnalysisMap({});
-    setError(null);
-    autoStartedRef.current = false;
 
-    fetchMonthlyGames(selectedArchive)
-      .then((games) => {
+    let cancelled = false;
+
+    const load = async () => {
+      setLoadingGames(true);
+      setRawGames([]);
+      setAnalysisMap({});
+      setError(null);
+      autoStartedRef.current = false;
+
+      try {
+        const games = await fetchMonthlyGames(selectedArchive);
         const data: RawGameData[] = games.map((g) => ({
           processed: processGame(g),
           pgn: g.pgn,
         }));
         // Sort newest first
         data.sort((a, b) => b.processed.end_time - a.processed.end_time);
+
+        if (cancelled) return;
         setRawGames(data);
 
-        // Initialise analysis state for all games
+        // Check Firestore cache for all games right away (parallel)
         const initialMap: Record<string, AnalysisState> = {};
-        data.forEach((g) => {
-          initialMap[g.processed.url] = defaultAnalysis();
-        });
+        await Promise.all(
+          data.map(async (g) => {
+            const cached = await loadCachedAnalysis(g.processed.url);
+            initialMap[g.processed.url] = cached
+              ? { status: 'done', progress: 0, total: 0, blunders: cached.blunders }
+              : defaultAnalysis();
+          }),
+        );
+
+        if (cancelled) return;
         setAnalysisMap(initialMap);
-      })
-      .catch((e) => setError(e.message))
-      .finally(() => setLoadingGames(false));
+      } catch (e) {
+        if (!cancelled) setError((e as Error).message);
+      } finally {
+        if (!cancelled) setLoadingGames(false);
+      }
+    };
+
+    load();
+    return () => { cancelled = true; };
   }, [selectedArchive]);
 
   // ── Helper: update analysis state for one game
@@ -457,12 +477,22 @@ export const GamesArchive: React.FC = () => {
   // ── Core: analyze a single game by URL (used by both auto-queue and manual)
   const analyzeGame = useCallback(
     async (url: string, pgn: string) => {
+      // 1. Try Firestore cache first
+      const cached = await loadCachedAnalysis(url);
+      if (cached) {
+        updateAnalysis(url, { status: 'done', blunders: cached.blunders });
+        return;
+      }
+
+      // 2. Run Stockfish
       updateAnalysis(url, { status: 'analyzing', progress: 0, total: 0, blunders: [] });
       try {
         const { blunders } = await analyzePgn(pgn, evaluate, (current, total) => {
           updateAnalysis(url, { progress: current, total });
         });
         updateAnalysis(url, { status: 'done', blunders });
+        // 3. Save to Firestore (fire-and-forget)
+        saveCachedAnalysis(url, blunders);
       } catch (e) {
         updateAnalysis(url, { status: 'error', error: String(e) });
       }
@@ -478,10 +508,11 @@ export const GamesArchive: React.FC = () => {
 
     autoStartedRef.current = true;
 
-    // Mark all games queued in one batch update
+    // Mark only uncached (idle) games as queued
     setAnalysisMap((prev) => {
       const next = { ...prev };
       rawGames.forEach((g) => {
+        // Only queue games not already resolved from cache
         if (!next[g.processed.url] || next[g.processed.url].status === 'idle') {
           next[g.processed.url] = { ...defaultAnalysis(), status: 'queued' };
         }
