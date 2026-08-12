@@ -469,15 +469,15 @@ interface MonthlyBlunderStat {
   label: string;          // e.g. "серпень 2026"
   totalGames: number;
   analyzedGames: number;
-  totalBlunders: number;  // player blunders only
+  totalBlunders: number;  // player blunders only (all classes)
+  rapid: { totalGames: number; analyzedGames: number; totalBlunders: number };
+  blitz: { totalGames: number; analyzedGames: number; totalBlunders: number };
 }
 
 const BlundersByMonthPanel: React.FC<{
   stats: MonthlyBlunderStat[];
   loading: boolean;
 }> = ({ stats, loading }) => {
-  const maxBlunders = Math.max(...stats.map((s) => s.totalBlunders), 1);
-
   if (loading) {
     return (
       <div className="mb-6 rounded-2xl border border-white/[0.05] bg-slate-900/60 p-5">
@@ -493,8 +493,134 @@ const BlundersByMonthPanel: React.FC<{
 
   if (stats.length === 0) return null;
 
-  // Show last 12 months, oldest → newest
   const displayed = [...stats].slice(-12);
+
+  // helpers
+  const shortMonth = (archiveUrl: string) => {
+    const parts = archiveUrl.split('/');
+    const monthNum = parseInt(parts[parts.length - 1], 10);
+    const year = parts[parts.length - 2];
+    return new Date(`${year}-${String(monthNum).padStart(2, '0')}-01`)
+      .toLocaleDateString('uk-UA', { month: 'short' })
+      .replace('.', '');
+  };
+
+  type TCStats = MonthlyBlunderStat['rapid'];
+
+  const renderSection = (
+    icon: string,
+    title: string,
+    iconCls: string,
+    extract: (s: MonthlyBlunderStat) => TCStats,
+  ) => {
+    const rows = displayed.map((s) => ({ ...s, tc: extract(s) }));
+    const hasAny = rows.some((r) => r.tc.totalGames > 0);
+    if (!hasAny) return null;
+
+    const maxB = Math.max(...rows.map((r) => r.tc.totalBlunders), 1);
+
+    return (
+      <div className="mb-4">
+        {/* Section title */}
+        <div className="flex items-center gap-1.5 mb-3">
+          <span className={`text-sm ${iconCls}`}>{icon}</span>
+          <span className="text-xs font-semibold text-slate-300">{title}</span>
+        </div>
+
+        {/* Bar chart */}
+        <div className="flex items-end gap-1.5" style={{ height: '72px' }}>
+          {rows.map((r) => {
+            if (r.tc.totalGames === 0) {
+              return <div key={r.archiveUrl} className="flex-1" />;
+            }
+            const pct = (r.tc.totalBlunders / maxB) * 100;
+            const avgStr = r.tc.analyzedGames > 0
+              ? (r.tc.totalBlunders / r.tc.analyzedGames).toFixed(1)
+              : '—';
+            const color =
+              r.tc.totalBlunders === 0
+                ? 'bg-emerald-500/60'
+                : r.tc.totalBlunders / Math.max(r.tc.analyzedGames, 1) >= 2
+                ? 'bg-rose-500/70'
+                : 'bg-[#81b64c]/70';
+            return (
+              <div
+                key={r.archiveUrl}
+                className="group relative flex-1 flex flex-col items-center justify-end"
+                style={{ height: '100%' }}
+              >
+                {/* Tooltip */}
+                <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 z-20 hidden group-hover:flex flex-col items-center pointer-events-none">
+                  <div className="rounded-xl bg-slate-800 border border-white/10 px-3 py-2 text-center whitespace-nowrap shadow-xl">
+                    <p className="text-white text-xs font-bold">{r.tc.totalBlunders} зівків</p>
+                    <p className="text-slate-400 text-[10px]">{avgStr}/партія</p>
+                    <p className="text-slate-600 text-[10px]">{r.tc.analyzedGames}/{r.tc.totalGames} проаналізовано</p>
+                  </div>
+                  <div className="w-2 h-2 bg-slate-800 border-b border-r border-white/10 rotate-45 -mt-1" />
+                </div>
+                {/* Bar */}
+                <div
+                  className={`w-full rounded-t-md transition-all duration-500 ${color}`}
+                  style={{ height: `${Math.max(pct, r.tc.totalBlunders === 0 ? 8 : 4)}%` }}
+                />
+              </div>
+            );
+          })}
+        </div>
+
+        {/* X-axis */}
+        <div className="flex gap-1.5 mt-1">
+          {rows.map((r) => (
+            <div key={r.archiveUrl} className="flex-1 text-center">
+              <span className="text-[9px] text-slate-700 leading-none">{shortMonth(r.archiveUrl)}</span>
+            </div>
+          ))}
+        </div>
+
+        {/* Table */}
+        <div className="mt-3 overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="border-b border-white/[0.04]">
+                <th className="text-left text-slate-600 font-medium pb-1.5 pr-3">Місяць</th>
+                <th className="text-right text-slate-600 font-medium pb-1.5 pr-3">Партій</th>
+                <th className="text-right text-slate-600 font-medium pb-1.5 pr-3">Зівків</th>
+                <th className="text-right text-slate-600 font-medium pb-1.5">Сер./партія</th>
+              </tr>
+            </thead>
+            <tbody>
+              {[...rows].reverse().map((r) => {
+                if (r.tc.totalGames === 0) return null;
+                const avg = r.tc.analyzedGames > 0
+                  ? (r.tc.totalBlunders / r.tc.analyzedGames).toFixed(2)
+                  : '—';
+                const blunderColor =
+                  r.tc.analyzedGames === 0
+                    ? 'text-slate-600'
+                    : r.tc.totalBlunders === 0
+                    ? 'text-emerald-400'
+                    : r.tc.totalBlunders / r.tc.analyzedGames >= 2
+                    ? 'text-rose-400'
+                    : 'text-amber-400';
+                return (
+                  <tr key={r.archiveUrl} className="border-b border-white/[0.02] hover:bg-white/[0.02] transition-colors">
+                    <td className="py-1.5 pr-3 text-slate-400">{r.label}</td>
+                    <td className="py-1.5 pr-3 text-right text-slate-500">
+                      {r.tc.analyzedGames}/{r.tc.totalGames}
+                    </td>
+                    <td className={`py-1.5 pr-3 text-right font-bold ${blunderColor}`}>
+                      {r.tc.analyzedGames > 0 ? r.tc.totalBlunders : '—'}
+                    </td>
+                    <td className={`py-1.5 text-right ${blunderColor}`}>{avg}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="mb-6 rounded-2xl border border-white/[0.05] bg-slate-900/60 p-5">
@@ -503,103 +629,15 @@ const BlundersByMonthPanel: React.FC<{
         <span className="text-[10px] text-slate-600">тільки твої зівки · аналіз з кешу</span>
       </div>
 
-      {/* Bar chart */}
-      <div className="flex items-end gap-1.5" style={{ height: '96px' }}>
-        {displayed.map((s) => {
-          const pct = maxBlunders === 0 ? 0 : (s.totalBlunders / maxBlunders) * 100;
-          const avgStr = s.analyzedGames > 0
-            ? (s.totalBlunders / s.analyzedGames).toFixed(1)
-            : '—';
-          const color =
-            s.totalBlunders === 0
-              ? 'bg-emerald-500/60'
-              : s.totalBlunders / Math.max(s.analyzedGames, 1) >= 2
-              ? 'bg-rose-500/70'
-              : 'bg-[#81b64c]/70';
-          return (
-            <div
-              key={s.archiveUrl}
-              className="group relative flex-1 flex flex-col items-center justify-end"
-              style={{ height: '100%' }}
-            >
-              {/* Tooltip */}
-              <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 z-20 hidden group-hover:flex flex-col items-center pointer-events-none">
-                <div className="rounded-xl bg-slate-800 border border-white/10 px-3 py-2 text-center whitespace-nowrap shadow-xl">
-                  <p className="text-white text-xs font-bold">{s.totalBlunders} зівків</p>
-                  <p className="text-slate-400 text-[10px]">{avgStr}/партія</p>
-                  <p className="text-slate-600 text-[10px]">{s.analyzedGames}/{s.totalGames} проаналізовано</p>
-                </div>
-                <div className="w-2 h-2 bg-slate-800 border-b border-r border-white/10 rotate-45 -mt-1" />
-              </div>
+      {renderSection('⏱', 'Rapid', 'text-blue-400', (s) => s.rapid)}
 
-              {/* Bar */}
-              <div
-                className={`w-full rounded-t-md transition-all duration-500 ${color}`}
-                style={{ height: `${Math.max(pct, s.totalBlunders === 0 ? 8 : 4)}%` }}
-              />
-            </div>
-          );
-        })}
-      </div>
+      {/* Divider between sections if both exist */}
+      {displayed.some((s) => s.rapid.totalGames > 0) &&
+        displayed.some((s) => s.blitz.totalGames > 0) && (
+        <div className="border-t border-white/[0.04] my-4" />
+      )}
 
-      {/* X-axis labels */}
-      <div className="flex gap-1.5 mt-1.5">
-        {displayed.map((s) => {
-          // Short month label: first 3 chars
-          const parts = s.archiveUrl.split('/');
-          const monthNum = parseInt(parts[parts.length - 1], 10);
-          const year = parts[parts.length - 2];
-          const shortLabel = new Date(`${year}-${String(monthNum).padStart(2, '0')}-01`)
-            .toLocaleDateString('uk-UA', { month: 'short' })
-            .replace('.', '');
-          return (
-            <div key={s.archiveUrl} className="flex-1 text-center">
-              <span className="text-[9px] text-slate-700 leading-none">{shortLabel}</span>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Summary table */}
-      <div className="mt-4 overflow-x-auto">
-        <table className="w-full text-xs">
-          <thead>
-            <tr className="border-b border-white/[0.04]">
-              <th className="text-left text-slate-600 font-medium pb-1.5 pr-3">Місяць</th>
-              <th className="text-right text-slate-600 font-medium pb-1.5 pr-3">Партій</th>
-              <th className="text-right text-slate-600 font-medium pb-1.5 pr-3">Зівків</th>
-              <th className="text-right text-slate-600 font-medium pb-1.5">Сер./партія</th>
-            </tr>
-          </thead>
-          <tbody>
-            {[...displayed].reverse().map((s) => {
-              const avg = s.analyzedGames > 0
-                ? (s.totalBlunders / s.analyzedGames).toFixed(2)
-                : '—';
-              const blunderColor =
-                s.analyzedGames === 0
-                  ? 'text-slate-600'
-                  : s.totalBlunders === 0
-                  ? 'text-emerald-400'
-                  : s.totalBlunders / s.analyzedGames >= 2
-                  ? 'text-rose-400'
-                  : 'text-amber-400';
-              return (
-                <tr key={s.archiveUrl} className="border-b border-white/[0.02] hover:bg-white/[0.02] transition-colors">
-                  <td className="py-1.5 pr-3 text-slate-400">{s.label}</td>
-                  <td className="py-1.5 pr-3 text-right text-slate-500">
-                    {s.analyzedGames}/{s.totalGames}
-                  </td>
-                  <td className={`py-1.5 pr-3 text-right font-bold ${blunderColor}`}>
-                    {s.analyzedGames > 0 ? s.totalBlunders : '—'}
-                  </td>
-                  <td className={`py-1.5 text-right ${blunderColor}`}>{avg}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+      {renderSection('⚡', 'Blitz', 'text-amber-400', (s) => s.blitz)}
     </div>
   );
 };
@@ -704,15 +742,26 @@ export const GamesArchive: React.FC = () => {
           let totalBlunders = 0;
           let analyzedGames = 0;
 
+          let rapidTotal = 0, rapidAnalyzed = 0, rapidBlunders = 0;
+          let blitzTotal = 0, blitzAnalyzed = 0, blitzBlunders = 0;
+
           await Promise.all(
             games.map(async (rawGame) => {
               const processed = processGame(rawGame);
+              const tc = processed.timeClass;
+              if (tc === 'rapid') rapidTotal += 1;
+              else if (tc === 'blitz') blitzTotal += 1;
+
               const cached = await loadCachedAnalysis(processed.url);
               if (cached) {
                 analyzedGames += 1;
-                totalBlunders += cached.blunders.filter(
+                const playerB = cached.blunders.filter(
                   (b) => b.color === processed.playerColor,
                 ).length;
+                totalBlunders += playerB;
+
+                if (tc === 'rapid') { rapidAnalyzed += 1; rapidBlunders += playerB; }
+                else if (tc === 'blitz') { blitzAnalyzed += 1; blitzBlunders += playerB; }
               }
             }),
           );
@@ -731,6 +780,8 @@ export const GamesArchive: React.FC = () => {
             totalGames: games.length,
             analyzedGames,
             totalBlunders,
+            rapid: { totalGames: rapidTotal, analyzedGames: rapidAnalyzed, totalBlunders: rapidBlunders },
+            blitz: { totalGames: blitzTotal, analyzedGames: blitzAnalyzed, totalBlunders: blitzBlunders },
           });
         } catch {
           // skip failed archive
