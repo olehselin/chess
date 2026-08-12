@@ -399,6 +399,8 @@ export const GamesArchive: React.FC = () => {
 
   // Track whether auto-analysis was already kicked off for current game set
   const autoStartedRef = useRef(false);
+  // Increments every time a new month is selected — lets old queues self-abort
+  const runGenRef = useRef(0);
   // Always-fresh ref to rawGames for the async queue closure
   const rawGamesRef = useRef<RawGameData[]>([]);
   rawGamesRef.current = rawGames;
@@ -426,6 +428,7 @@ export const GamesArchive: React.FC = () => {
       setAnalysisMap({});
       setError(null);
       autoStartedRef.current = false;
+      runGenRef.current += 1; // invalidate any running queue from previous month
 
       try {
         const games = await fetchMonthlyGames(selectedArchive);
@@ -476,9 +479,12 @@ export const GamesArchive: React.FC = () => {
 
   // ── Core: analyze a single game by URL (used by both auto-queue and manual)
   const analyzeGame = useCallback(
-    async (url: string, pgn: string) => {
+    async (url: string, pgn: string, gen?: number) => {
+      const isStale = () => gen !== undefined && gen !== runGenRef.current;
+
       // 1. Try Firestore cache first
       const cached = await loadCachedAnalysis(url);
+      if (isStale()) return;
       if (cached) {
         updateAnalysis(url, { status: 'done', blunders: cached.blunders });
         return;
@@ -488,13 +494,14 @@ export const GamesArchive: React.FC = () => {
       updateAnalysis(url, { status: 'analyzing', progress: 0, total: 0, blunders: [] });
       try {
         const { blunders } = await analyzePgn(pgn, evaluate, (current, total) => {
-          updateAnalysis(url, { progress: current, total });
+          if (!isStale()) updateAnalysis(url, { progress: current, total });
         });
+        if (isStale()) return;
         updateAnalysis(url, { status: 'done', blunders });
         // 3. Save to Firestore (fire-and-forget)
         saveCachedAnalysis(url, blunders);
       } catch (e) {
-        updateAnalysis(url, { status: 'error', error: String(e) });
+        if (!isStale()) updateAnalysis(url, { status: 'error', error: String(e) });
       }
     },
     [evaluate, updateAnalysis],
@@ -507,6 +514,7 @@ export const GamesArchive: React.FC = () => {
     if (autoStartedRef.current) return;
 
     autoStartedRef.current = true;
+    const myGen = runGenRef.current; // snapshot generation for this batch
 
     // Mark only uncached (idle) games as queued
     setAnalysisMap((prev) => {
@@ -520,15 +528,16 @@ export const GamesArchive: React.FC = () => {
       return next;
     });
 
-    // Run sequentially in background
+    // Run sequentially in background — abort if month changed
     (async () => {
       for (const game of rawGamesRef.current) {
-        await analyzeGame(game.processed.url, game.pgn);
+        if (myGen !== runGenRef.current) break; // month switched — stop immediately
+        await analyzeGame(game.processed.url, game.pgn, myGen);
       }
     })();
   }, [sfStatus, rawGames, analyzeGame]);
 
-  // ── Manual trigger (retry or idle games)
+  // ── Manual trigger (retry or idle games) — no gen check, always intentional
   const handleManualAnalyze = useCallback(
     (url: string, pgn: string) => {
       analyzeGame(url, pgn);
