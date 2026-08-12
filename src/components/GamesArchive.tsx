@@ -319,24 +319,148 @@ const Skeleton: React.FC = () => (
 
 // ─── Stats Header ─────────────────────────────────────────────────────────────
 
-const StatsHeader: React.FC<{ games: ProcessedGame[] }> = ({ games }) => {
-  const wins = games.filter((g) => g.result === 'win').length;
-  const losses = games.filter((g) => g.result === 'loss').length;
-  const draws = games.filter((g) => g.result === 'draw').length;
+const StatsHeader: React.FC<{
+  games: ProcessedGame[];
+  analysisMap: Record<string, AnalysisState>;
+}> = ({ games, analysisMap }) => {
+  // Helper: compute stats for a subset of games
+  const calcStats = (subset: ProcessedGame[]) => {
+    const wins = subset.filter((g) => g.result === 'win').length;
+    const losses = subset.filter((g) => g.result === 'loss').length;
+    const draws = subset.filter((g) => g.result === 'draw').length;
+    const analysedGames = subset.filter((g) => analysisMap[g.url]?.status === 'done');
+    const totalBlunders = analysedGames.reduce(
+      (sum, g) =>
+        sum + (analysisMap[g.url]?.blunders.filter((b) => b.color === g.playerColor).length ?? 0),
+      0,
+    );
+    const avgBlunders =
+      analysedGames.length > 0 ? (totalBlunders / analysedGames.length).toFixed(2) : null;
+    return { wins, losses, draws, totalBlunders, avgBlunders, analysedCount: analysedGames.length };
+  };
+
+  const rapidGames = games.filter((g) => g.timeClass === 'rapid');
+  const blitzGames = games.filter((g) => g.timeClass === 'blitz');
+
+  const rapidStats = calcStats(rapidGames);
+  const blitzStats = calcStats(blitzGames);
+
+  // Overall row (all games, no blunder breakdown)
+  const totalWins = games.filter((g) => g.result === 'win').length;
+  const totalLosses = games.filter((g) => g.result === 'loss').length;
+  const totalDraws = games.filter((g) => g.result === 'draw').length;
+
+  const TimeCard: React.FC<{
+    label: string;
+    icon: string;
+    iconCls: string;
+    accentCls: string;
+    stats: ReturnType<typeof calcStats>;
+    count: number;
+  }> = ({ label, icon, iconCls, accentCls, stats, count }) =>
+    count === 0 ? null : (
+      <div className={`flex-1 rounded-2xl border border-white/[0.05] bg-slate-900/70 p-4 min-w-[160px]`}>
+        {/* Header */}
+        <div className="flex items-center gap-1.5 mb-3">
+          <span className={`text-sm ${iconCls}`}>{icon}</span>
+          <span className="text-xs font-semibold text-slate-300">{label}</span>
+          <span className="ml-auto text-[10px] text-slate-600 font-mono">{count} партій</span>
+        </div>
+
+        {/* Results row */}
+        <div className="grid grid-cols-3 gap-1 mb-3">
+          {[
+            { val: stats.wins, lbl: 'Перемог', cls: 'text-emerald-400' },
+            { val: stats.losses, lbl: 'Поразок', cls: 'text-rose-400' },
+            { val: stats.draws, lbl: 'Нічиїх', cls: 'text-slate-400' },
+          ].map(({ val, lbl, cls }) => (
+            <div key={lbl} className="rounded-xl bg-white/[0.03] py-2 text-center">
+              <div className={`text-lg font-extrabold leading-none ${cls}`}>{val}</div>
+              <div className="text-[9px] text-slate-600 mt-0.5">{lbl}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Win-rate bar */}
+        <div className="mb-3">
+          <div className="flex justify-between mb-1">
+            <span className="text-[9px] text-slate-600">В/П/Н</span>
+            <span className="text-[9px] text-slate-500 font-mono">
+              {count > 0 ? Math.round((stats.wins / count) * 100) : 0}% перемог
+            </span>
+          </div>
+          <div className="h-1.5 rounded-full bg-slate-800 overflow-hidden flex">
+            <div
+              className="bg-emerald-500/70 h-full transition-all duration-700"
+              style={{ width: `${count > 0 ? (stats.wins / count) * 100 : 0}%` }}
+            />
+            <div
+              className="bg-slate-500/50 h-full transition-all duration-700"
+              style={{ width: `${count > 0 ? (stats.draws / count) * 100 : 0}%` }}
+            />
+            <div
+              className="bg-rose-500/50 h-full transition-all duration-700"
+              style={{ width: `${count > 0 ? (stats.losses / count) * 100 : 0}%` }}
+            />
+          </div>
+        </div>
+
+        {/* Blunders */}
+        <div className={`rounded-xl border border-white/[0.04] bg-white/[0.02] px-3 py-2 flex items-center justify-between`}>
+          <div>
+            <div className="text-[9px] text-slate-600 mb-0.5">Зівки (твої)</div>
+            <div className={`text-base font-extrabold leading-none ${stats.totalBlunders > 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
+              {stats.analysedCount > 0 ? stats.totalBlunders : '—'}
+            </div>
+          </div>
+          <div className="text-right">
+            <div className="text-[9px] text-slate-600 mb-0.5">Сер./партія</div>
+            <div className="text-base font-extrabold leading-none text-slate-300">
+              {stats.avgBlunders ?? '—'}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
 
   return (
-    <div className="mb-5 grid grid-cols-4 gap-px overflow-hidden rounded-2xl border border-white/[0.05] bg-white/[0.02]">
-      {[
-        { label: 'Партій', value: games.length, color: 'text-white' },
-        { label: 'Перемог', value: wins, color: 'text-emerald-400' },
-        { label: 'Поразок', value: losses, color: 'text-rose-400' },
-        { label: 'Нічиїх', value: draws, color: 'text-slate-400' },
-      ].map(({ label, value, color }) => (
-        <div key={label} className="bg-slate-900/80 px-4 py-3 text-center">
-          <div className={`text-2xl font-extrabold ${color}`}>{value}</div>
-          <div className="text-xs text-slate-600 mt-0.5">{label}</div>
+    <div className="mb-5 space-y-3">
+      {/* Compact overall row */}
+      <div className="grid grid-cols-4 gap-px overflow-hidden rounded-2xl border border-white/[0.05] bg-white/[0.02]">
+        {[
+          { label: 'Партій', value: games.length, color: 'text-white' },
+          { label: 'Перемог', value: totalWins, color: 'text-emerald-400' },
+          { label: 'Поразок', value: totalLosses, color: 'text-rose-400' },
+          { label: 'Нічиїх', value: totalDraws, color: 'text-slate-400' },
+        ].map(({ label, value, color }) => (
+          <div key={label} className="bg-slate-900/80 px-4 py-3 text-center">
+            <div className={`text-2xl font-extrabold ${color}`}>{value}</div>
+            <div className="text-xs text-slate-600 mt-0.5">{label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Per-time-class cards */}
+      {(rapidGames.length > 0 || blitzGames.length > 0) && (
+        <div className="flex gap-3">
+          <TimeCard
+            label="Rapid"
+            icon="⏱"
+            iconCls="text-blue-400"
+            accentCls="border-blue-500/20"
+            stats={rapidStats}
+            count={rapidGames.length}
+          />
+          <TimeCard
+            label="Blitz"
+            icon="⚡"
+            iconCls="text-amber-400"
+            accentCls="border-amber-500/20"
+            stats={blitzStats}
+            count={blitzGames.length}
+          />
         </div>
-      ))}
+      )}
     </div>
   );
 };
@@ -966,7 +1090,7 @@ export const GamesArchive: React.FC = () => {
 
         {/* Stats */}
         {!loadingGames && rawGames.length > 0 && (
-          <StatsHeader games={rawGames.map((g) => g.processed)} />
+          <StatsHeader games={rawGames.map((g) => g.processed)} analysisMap={analysisMap} />
         )}
 
         {/* Filters + sort */}
