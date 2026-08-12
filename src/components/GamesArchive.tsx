@@ -493,10 +493,15 @@ export const GamesArchive: React.FC = () => {
       // 2. Run Stockfish
       updateAnalysis(url, { status: 'analyzing', progress: 0, total: 0, blunders: [] });
       try {
-        const { blunders } = await analyzePgn(pgn, evaluate, (current, total) => {
-          if (!isStale()) updateAnalysis(url, { progress: current, total });
-        });
-        if (isStale()) return;
+        const { blunders, aborted } = await analyzePgn(
+          pgn,
+          evaluate,
+          (current, total) => {
+            if (!isStale()) updateAnalysis(url, { progress: current, total });
+          },
+          () => !isStale(), // stop sending FENs to Stockfish if month changed
+        );
+        if (isStale() || aborted) return;
         updateAnalysis(url, { status: 'done', blunders });
         // 3. Save to Firestore (fire-and-forget)
         saveCachedAnalysis(url, blunders);

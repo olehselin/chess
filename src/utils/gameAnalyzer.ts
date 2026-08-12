@@ -198,13 +198,19 @@ export async function analyzePgn(
   pgn: string,
   evaluateFen: (fen: string) => Promise<{ cp: number | null; mate: number | null }>,
   onProgress?: (current: number, total: number) => void,
-): Promise<{ moves: MoveEval[]; blunders: AnalyzedBlunder[] }> {
+  shouldContinue?: () => boolean,
+): Promise<{ moves: MoveEval[]; blunders: AnalyzedBlunder[]; aborted?: boolean }> {
   const rawMoves = extractMovesFromPgn(pgn);
   if (!rawMoves.length) return { moves: [], blunders: [] };
 
   const moves: MoveEval[] = [];
 
   for (let i = 0; i < rawMoves.length; i++) {
+    // Stop BEFORE sending the next FEN to Stockfish if caller says so
+    if (shouldContinue && !shouldContinue()) {
+      return { moves, blunders: detectBlunders(moves), aborted: true };
+    }
+
     const raw = rawMoves[i];
     onProgress?.(i, rawMoves.length);
 
