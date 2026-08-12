@@ -338,6 +338,148 @@ const StatsHeader: React.FC<{ games: ProcessedGame[] }> = ({ games }) => {
   );
 };
 
+// ─── Blunders By Month Panel ──────────────────────────────────────────────────
+
+interface MonthlyBlunderStat {
+  archiveUrl: string;
+  label: string;          // e.g. "серпень 2026"
+  totalGames: number;
+  analyzedGames: number;
+  totalBlunders: number;  // player blunders only
+}
+
+const BlundersByMonthPanel: React.FC<{
+  stats: MonthlyBlunderStat[];
+  loading: boolean;
+}> = ({ stats, loading }) => {
+  const maxBlunders = Math.max(...stats.map((s) => s.totalBlunders), 1);
+
+  if (loading) {
+    return (
+      <div className="mb-6 rounded-2xl border border-white/[0.05] bg-slate-900/60 p-5">
+        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-4">Зівки по місяцях</p>
+        <div className="flex items-end gap-1.5 h-24">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="flex-1 rounded-t-md bg-slate-800 animate-pulse" style={{ height: `${30 + i * 10}%` }} />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (stats.length === 0) return null;
+
+  // Show last 12 months, oldest → newest
+  const displayed = [...stats].slice(-12);
+
+  return (
+    <div className="mb-6 rounded-2xl border border-white/[0.05] bg-slate-900/60 p-5">
+      <div className="flex items-center justify-between mb-4">
+        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">🎯 Зівки по місяцях</p>
+        <span className="text-[10px] text-slate-600">тільки твої зівки · аналіз з кешу</span>
+      </div>
+
+      {/* Bar chart */}
+      <div className="flex items-end gap-1.5" style={{ height: '96px' }}>
+        {displayed.map((s) => {
+          const pct = maxBlunders === 0 ? 0 : (s.totalBlunders / maxBlunders) * 100;
+          const avgStr = s.analyzedGames > 0
+            ? (s.totalBlunders / s.analyzedGames).toFixed(1)
+            : '—';
+          const color =
+            s.totalBlunders === 0
+              ? 'bg-emerald-500/60'
+              : s.totalBlunders / Math.max(s.analyzedGames, 1) >= 2
+              ? 'bg-rose-500/70'
+              : 'bg-[#81b64c]/70';
+          return (
+            <div
+              key={s.archiveUrl}
+              className="group relative flex-1 flex flex-col items-center justify-end"
+              style={{ height: '100%' }}
+            >
+              {/* Tooltip */}
+              <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 z-20 hidden group-hover:flex flex-col items-center pointer-events-none">
+                <div className="rounded-xl bg-slate-800 border border-white/10 px-3 py-2 text-center whitespace-nowrap shadow-xl">
+                  <p className="text-white text-xs font-bold">{s.totalBlunders} зівків</p>
+                  <p className="text-slate-400 text-[10px]">{avgStr}/партія</p>
+                  <p className="text-slate-600 text-[10px]">{s.analyzedGames}/{s.totalGames} проаналізовано</p>
+                </div>
+                <div className="w-2 h-2 bg-slate-800 border-b border-r border-white/10 rotate-45 -mt-1" />
+              </div>
+
+              {/* Bar */}
+              <div
+                className={`w-full rounded-t-md transition-all duration-500 ${color}`}
+                style={{ height: `${Math.max(pct, s.totalBlunders === 0 ? 8 : 4)}%` }}
+              />
+            </div>
+          );
+        })}
+      </div>
+
+      {/* X-axis labels */}
+      <div className="flex gap-1.5 mt-1.5">
+        {displayed.map((s) => {
+          // Short month label: first 3 chars
+          const parts = s.archiveUrl.split('/');
+          const monthNum = parseInt(parts[parts.length - 1], 10);
+          const year = parts[parts.length - 2];
+          const shortLabel = new Date(`${year}-${String(monthNum).padStart(2, '0')}-01`)
+            .toLocaleDateString('uk-UA', { month: 'short' })
+            .replace('.', '');
+          return (
+            <div key={s.archiveUrl} className="flex-1 text-center">
+              <span className="text-[9px] text-slate-700 leading-none">{shortLabel}</span>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Summary table */}
+      <div className="mt-4 overflow-x-auto">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="border-b border-white/[0.04]">
+              <th className="text-left text-slate-600 font-medium pb-1.5 pr-3">Місяць</th>
+              <th className="text-right text-slate-600 font-medium pb-1.5 pr-3">Партій</th>
+              <th className="text-right text-slate-600 font-medium pb-1.5 pr-3">Зівків</th>
+              <th className="text-right text-slate-600 font-medium pb-1.5">Сер./партія</th>
+            </tr>
+          </thead>
+          <tbody>
+            {[...displayed].reverse().map((s) => {
+              const avg = s.analyzedGames > 0
+                ? (s.totalBlunders / s.analyzedGames).toFixed(2)
+                : '—';
+              const blunderColor =
+                s.analyzedGames === 0
+                  ? 'text-slate-600'
+                  : s.totalBlunders === 0
+                  ? 'text-emerald-400'
+                  : s.totalBlunders / s.analyzedGames >= 2
+                  ? 'text-rose-400'
+                  : 'text-amber-400';
+              return (
+                <tr key={s.archiveUrl} className="border-b border-white/[0.02] hover:bg-white/[0.02] transition-colors">
+                  <td className="py-1.5 pr-3 text-slate-400">{s.label}</td>
+                  <td className="py-1.5 pr-3 text-right text-slate-500">
+                    {s.analyzedGames}/{s.totalGames}
+                  </td>
+                  <td className={`py-1.5 pr-3 text-right font-bold ${blunderColor}`}>
+                    {s.analyzedGames > 0 ? s.totalBlunders : '—'}
+                  </td>
+                  <td className={`py-1.5 text-right ${blunderColor}`}>{avg}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+};
+
 // ─── Month Selector ───────────────────────────────────────────────────────────
 
 const MonthSelector: React.FC<{
@@ -392,6 +534,10 @@ export const GamesArchive: React.FC = () => {
   const [sortBy, setSortBy] = useState<SortKey>('date');
   const [searchQuery, setSearchQuery] = useState('');
 
+  // Monthly blunder stats
+  const [monthlyStats, setMonthlyStats] = useState<MonthlyBlunderStat[]>([]);
+  const [loadingMonthlyStats, setLoadingMonthlyStats] = useState(false);
+
   // Centralised per-game analysis state, keyed by game URL
   const [analysisMap, setAnalysisMap] = useState<Record<string, AnalysisState>>({});
 
@@ -415,6 +561,66 @@ export const GamesArchive: React.FC = () => {
       .catch((e) => setError(e.message))
       .finally(() => setLoadingArchives(false));
   }, []);
+
+  // ── Load monthly blunder stats from Firestore cache for all archives
+  useEffect(() => {
+    if (archives.length === 0) return;
+    let cancelled = false;
+    setLoadingMonthlyStats(true);
+
+    (async () => {
+      const results: MonthlyBlunderStat[] = [];
+
+      for (const archive of archives) {
+        if (cancelled) break;
+        try {
+          const games = await fetchMonthlyGames(archive);
+          if (cancelled) break;
+
+          let totalBlunders = 0;
+          let analyzedGames = 0;
+
+          await Promise.all(
+            games.map(async (rawGame) => {
+              const processed = processGame(rawGame);
+              const cached = await loadCachedAnalysis(processed.url);
+              if (cached) {
+                analyzedGames += 1;
+                totalBlunders += cached.blunders.filter(
+                  (b) => b.color === processed.playerColor,
+                ).length;
+              }
+            }),
+          );
+
+          const parts = archive.split('/');
+          const year = parts[parts.length - 2];
+          const monthNum = parts[parts.length - 1];
+          const label = new Date(`${year}-${monthNum}-01`).toLocaleDateString('uk-UA', {
+            month: 'long',
+            year: 'numeric',
+          });
+
+          results.push({
+            archiveUrl: archive,
+            label,
+            totalGames: games.length,
+            analyzedGames,
+            totalBlunders,
+          });
+        } catch {
+          // skip failed archive
+        }
+      }
+
+      if (!cancelled) {
+        setMonthlyStats(results);
+        setLoadingMonthlyStats(false);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [archives]);
 
   // ── Load games when selected archive changes
   useEffect(() => {
@@ -727,6 +933,11 @@ export const GamesArchive: React.FC = () => {
 
       {/* ── Main content ── */}
       <div className="mx-auto max-w-3xl px-4 pt-7 pb-16">
+        {/* Blunders by month */}
+        {(loadingMonthlyStats || monthlyStats.length > 0) && (
+          <BlundersByMonthPanel stats={monthlyStats} loading={loadingMonthlyStats} />
+        )}
+
         {/* Month selector */}
         {archives.length > 0 && (
           <MonthSelector archives={archives} selected={selectedArchive} onSelect={setSelectedArchive} />
