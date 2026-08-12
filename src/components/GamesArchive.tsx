@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ProcessedGame } from '../types/chess';
 import { fetchArchives, fetchMonthlyGames, processGame, USERNAME } from '../utils/chessApi';
 import { analyzePgn, type AnalyzedBlunder } from '../utils/gameAnalyzer';
@@ -129,7 +129,7 @@ const BlunderPanel: React.FC<BlunderPanelProps> = ({ blunders, playerColor }) =>
 // ─── Game Card ────────────────────────────────────────────────────────────────
 
 interface AnalysisState {
-  status: 'idle' | 'analyzing' | 'done' | 'error';
+  status: 'idle' | 'queued' | 'analyzing' | 'done' | 'error';
   progress: number;
   total: number;
   blunders: AnalyzedBlunder[];
@@ -138,33 +138,12 @@ interface AnalysisState {
 
 interface GameCardProps {
   game: ProcessedGame;
-  rawPgn: string;
-  onAnalyze: (pgn: string, onProgress: (c: number, t: number) => void) => Promise<AnalyzedBlunder[]>;
+  analysis: AnalysisState;
+  onAnalyze: () => void;
 }
 
-const GameCard: React.FC<GameCardProps> = ({ game, rawPgn, onAnalyze }) => {
+const GameCard: React.FC<GameCardProps> = ({ game, analysis, onAnalyze }) => {
   const [expanded, setExpanded] = useState(false);
-  const [analysis, setAnalysis] = useState<AnalysisState>({
-    status: 'idle',
-    progress: 0,
-    total: 0,
-    blunders: [],
-  });
-
-  const handleAnalyze = async () => {
-    if (analysis.status === 'analyzing') return;
-    setAnalysis({ status: 'analyzing', progress: 0, total: 0, blunders: [] });
-    setExpanded(true);
-
-    try {
-      const blunders = await onAnalyze(rawPgn, (current, total) => {
-        setAnalysis((prev) => ({ ...prev, progress: current, total }));
-      });
-      setAnalysis({ status: 'done', progress: blunders.length, total: 0, blunders });
-    } catch (e) {
-      setAnalysis({ status: 'error', progress: 0, total: 0, blunders: [], error: String(e) });
-    }
-  };
 
   const playerBlunderCount = analysis.blunders.filter((b) => b.color === game.playerColor).length;
 
@@ -178,15 +157,21 @@ const GameCard: React.FC<GameCardProps> = ({ game, rawPgn, onAnalyze }) => {
     >
       {/* ── Main row ── */}
       <div className="flex items-center gap-4 px-5 py-4">
-        {/* Blunder count / analyze button */}
+        {/* Blunder count / status */}
         <div className="w-14 flex-shrink-0 text-center">
           {analysis.status === 'idle' && (
             <button
-              onClick={handleAnalyze}
+              onClick={onAnalyze}
               className="w-full rounded-xl border border-[#81b64c]/30 bg-[#81b64c]/10 py-1.5 text-xs font-semibold text-[#81b64c] hover:bg-[#81b64c]/20 transition-colors"
             >
               Аналіз
             </button>
+          )}
+          {analysis.status === 'queued' && (
+            <div className="flex flex-col items-center gap-1">
+              <div className="h-5 w-5 rounded-full border-2 border-slate-700 border-t-slate-500 animate-spin" />
+              <span className="text-[10px] text-slate-600">черга</span>
+            </div>
           )}
           {analysis.status === 'analyzing' && (
             <div className="flex flex-col items-center gap-1">
@@ -218,7 +203,13 @@ const GameCard: React.FC<GameCardProps> = ({ game, rawPgn, onAnalyze }) => {
             </button>
           )}
           {analysis.status === 'error' && (
-            <span className="text-xs text-rose-500">Помилка</span>
+            <button
+              onClick={onAnalyze}
+              title={analysis.error}
+              className="w-full rounded-xl border border-rose-500/30 bg-rose-500/10 py-1.5 text-xs font-semibold text-rose-400 hover:bg-rose-500/20 transition-colors"
+            >
+              Retry
+            </button>
           )}
         </div>
 
@@ -377,6 +368,13 @@ interface RawGameData {
   pgn: string;
 }
 
+const defaultAnalysis = (): AnalysisState => ({
+  status: 'idle',
+  progress: 0,
+  total: 0,
+  blunders: [],
+});
+
 // ─── Main App Component ────────────────────────────────────────────────────────
 
 type ResultFilter = 'all' | 'win' | 'loss' | 'draw';
@@ -393,7 +391,16 @@ export const GamesArchive: React.FC = () => {
   const [sortBy, setSortBy] = useState<SortKey>('date');
   const [searchQuery, setSearchQuery] = useState('');
 
+  // Centralised per-game analysis state, keyed by game URL
+  const [analysisMap, setAnalysisMap] = useState<Record<string, AnalysisState>>({});
+
   const { status: sfStatus, evaluate } = useStockfish();
+
+  // Track whether auto-analysis was already kicked off for current game set
+  const autoStartedRef = useRef(false);
+  // Always-fresh ref to rawGames for the async queue closure
+  const rawGamesRef = useRef<RawGameData[]>([]);
+  rawGamesRef.current = rawGames;
 
   // ── Load archives on mount
   useEffect(() => {
@@ -411,7 +418,9 @@ export const GamesArchive: React.FC = () => {
     if (!selectedArchive) return;
     setLoadingGames(true);
     setRawGames([]);
+    setAnalysisMap({});
     setError(null);
+    autoStartedRef.current = false;
 
     fetchMonthlyGames(selectedArchive)
       .then((games) => {
@@ -422,22 +431,87 @@ export const GamesArchive: React.FC = () => {
         // Sort newest first
         data.sort((a, b) => b.processed.end_time - a.processed.end_time);
         setRawGames(data);
+
+        // Initialise analysis state for all games
+        const initialMap: Record<string, AnalysisState> = {};
+        data.forEach((g) => {
+          initialMap[g.processed.url] = defaultAnalysis();
+        });
+        setAnalysisMap(initialMap);
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoadingGames(false));
   }, [selectedArchive]);
 
-  // ── Analyze a game using Stockfish
-  const handleAnalyze = useCallback(
-    async (
-      pgn: string,
-      onProgress: (c: number, t: number) => void,
-    ): Promise<AnalyzedBlunder[]> => {
-      const { blunders } = await analyzePgn(pgn, evaluate, onProgress);
-      return blunders;
+  // ── Helper: update analysis state for one game
+  const updateAnalysis = useCallback(
+    (url: string, patch: Partial<AnalysisState>) => {
+      setAnalysisMap((prev) => ({
+        ...prev,
+        [url]: { ...(prev[url] ?? defaultAnalysis()), ...patch },
+      }));
     },
-    [evaluate],
+    [],
   );
+
+  // ── Core: analyze a single game by URL (used by both auto-queue and manual)
+  const analyzeGame = useCallback(
+    async (url: string, pgn: string) => {
+      updateAnalysis(url, { status: 'analyzing', progress: 0, total: 0, blunders: [] });
+      try {
+        const { blunders } = await analyzePgn(pgn, evaluate, (current, total) => {
+          updateAnalysis(url, { progress: current, total });
+        });
+        updateAnalysis(url, { status: 'done', blunders });
+      } catch (e) {
+        updateAnalysis(url, { status: 'error', error: String(e) });
+      }
+    },
+    [evaluate, updateAnalysis],
+  );
+
+  // ── Auto-analysis queue: fires once games are loaded AND Stockfish is ready
+  useEffect(() => {
+    if (sfStatus !== 'ready') return;
+    if (rawGames.length === 0) return;
+    if (autoStartedRef.current) return;
+
+    autoStartedRef.current = true;
+
+    // Mark all games queued in one batch update
+    setAnalysisMap((prev) => {
+      const next = { ...prev };
+      rawGames.forEach((g) => {
+        if (!next[g.processed.url] || next[g.processed.url].status === 'idle') {
+          next[g.processed.url] = { ...defaultAnalysis(), status: 'queued' };
+        }
+      });
+      return next;
+    });
+
+    // Run sequentially in background
+    (async () => {
+      for (const game of rawGamesRef.current) {
+        await analyzeGame(game.processed.url, game.pgn);
+      }
+    })();
+  }, [sfStatus, rawGames, analyzeGame]);
+
+  // ── Manual trigger (retry or idle games)
+  const handleManualAnalyze = useCallback(
+    (url: string, pgn: string) => {
+      analyzeGame(url, pgn);
+    },
+    [analyzeGame],
+  );
+
+  // ── Overall auto-analysis progress
+  const autoProgress = useMemo(() => {
+    const vals = Object.values(analysisMap);
+    if (vals.length === 0) return null;
+    const done = vals.filter((a) => a.status === 'done' || a.status === 'error').length;
+    return { done, total: vals.length };
+  }, [analysisMap]);
 
   // ── Filter + sort
   const filteredGames = useMemo(() => {
@@ -492,7 +566,7 @@ export const GamesArchive: React.FC = () => {
             <span
               className={`h-1.5 w-1.5 rounded-full ${
                 sfStatus === 'ready'
-                  ? 'bg-emerald-400 animate-none'
+                  ? 'bg-emerald-400'
                   : sfStatus === 'loading'
                   ? 'bg-amber-400 animate-pulse'
                   : 'bg-rose-400'
@@ -502,6 +576,22 @@ export const GamesArchive: React.FC = () => {
               {sfStatus === 'ready' ? 'Stockfish готовий' : sfStatus === 'loading' ? 'Завантаження Stockfish…' : 'Помилка Stockfish'}
             </span>
           </div>
+
+          {/* Auto-analysis progress */}
+          {autoProgress !== null && autoProgress.done < autoProgress.total && sfStatus === 'ready' && (
+            <div className="flex items-center gap-2 text-xs text-slate-500">
+              <div className="h-1 w-20 rounded-full bg-slate-800 overflow-hidden">
+                <div
+                  className="h-full bg-[#81b64c] transition-all duration-500"
+                  style={{ width: `${(autoProgress.done / autoProgress.total) * 100}%` }}
+                />
+              </div>
+              <span className="tabular-nums">{autoProgress.done}/{autoProgress.total}</span>
+            </div>
+          )}
+          {autoProgress !== null && autoProgress.done === autoProgress.total && autoProgress.total > 0 && (
+            <span className="text-xs text-emerald-500/80">✓ Аналіз завершено</span>
+          )}
 
           <div className="flex-1" />
 
@@ -572,15 +662,7 @@ export const GamesArchive: React.FC = () => {
           </div>
         )}
 
-        {/* Info banner */}
-        {!loadingGames && rawGames.length > 0 && sfStatus === 'ready' && (
-          <div className="mb-4 flex items-center gap-2 rounded-xl border border-[#81b64c]/20 bg-[#81b64c]/5 px-4 py-2.5">
-            <span className="text-[#81b64c] text-sm">♟</span>
-            <p className="text-xs text-slate-400">
-              Натисніть <span className="font-semibold text-[#81b64c]">Аналіз</span> на будь-якій партії — Stockfish перевірить кожен хід і знайде зівки (≥ 3.0 п.)
-            </p>
-          </div>
-        )}
+
 
         {/* Loading */}
         {loadingGames && (
@@ -605,8 +687,8 @@ export const GamesArchive: React.FC = () => {
                 <GameCard
                   key={g.processed.url}
                   game={g.processed}
-                  rawPgn={g.pgn}
-                  onAnalyze={handleAnalyze}
+                  analysis={analysisMap[g.processed.url] ?? defaultAnalysis()}
+                  onAnalyze={() => handleManualAnalyze(g.processed.url, g.pgn)}
                 />
               ))}
             </div>
