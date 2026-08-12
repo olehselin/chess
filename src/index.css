@@ -5,21 +5,93 @@
   box-sizing: border-box;
 }
 
-body {
-  margin: 0;
-  background-color: #0d0f14;
+/* ── Dark theme (default) ─────────────────────────────────── */
+:root {
+  --bg-base:         #0d0f14;
+  --scrollbar-thumb: rgba(255,255,255,0.1);
+  --scrollbar-hover: rgba(255,255,255,0.2);
 }
 
-::-webkit-scrollbar {
-  width: 6px;
+/* ── Light theme ──────────────────────────────────────────── */
+.light {
+  --bg-base:         #f0f4f8;
+  --scrollbar-thumb: rgba(0,0,0,0.15);
+  --scrollbar-hover: rgba(0,0,0,0.25);
 }
-::-webkit-scrollbar-track {
-  background: transparent;
+
+body {
+  margin: 0;
+  background-color: var(--bg-base);
+  transition: background-color 0.3s ease;
 }
+
+/* ── Scrollbar ────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
-  background: rgba(255,255,255,0.1);
+  background: var(--scrollbar-thumb);
   border-radius: 3px;
+  transition: background 0.3s;
 }
-::-webkit-scrollbar-thumb:hover {
-  background: rgba(255,255,255,0.2);
+::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-hover); }
+
+/* ════════════════════════════════════════════════════════════
+   LIGHT THEME — override hardcoded Tailwind dark classes
+   ════════════════════════════════════════════════════════════ */
+
+/* ── Backgrounds ── */
+.light .bg-\[\#0d0f14\]               { background-color: #f0f4f8 !important; }
+.light .bg-\[\#0d0f14\]\/95           { background-color: rgba(240,244,248,0.97) !important; }
+.light .bg-slate-900\/80,
+.light .bg-slate-900\/70,
+.light .bg-slate-900\/60,
+.light .bg-slate-900\/50              { background-color: rgba(255,255,255,0.92) !important; }
+.light .bg-slate-800                  { background-color: #e2e8f0 !important; }
+.light .bg-slate-700                  { background-color: #cbd5e1 !important; }
+.light .bg-white\/\[0\.02\]           { background-color: rgba(0,0,0,0.025) !important; }
+.light .bg-white\/\[0\.03\]           { background-color: rgba(0,0,0,0.04) !important; }
+.light .bg-white\/\[0\.05\]           { background-color: rgba(0,0,0,0.06) !important; }
+.light .bg-slate-900\/80.animate-pulse { background-color: #e8edf3 !important; }
+
+/* Hover */
+.light .hover\:bg-slate-800\/60:hover { background-color: rgba(0,0,0,0.05) !important; }
+.light .hover\:bg-white\/\[0\.02\]:hover { background-color: rgba(0,0,0,0.04) !important; }
+
+/* ── Borders ── */
+.light .border-white\/\[0\.04\],
+.light .border-white\/\[0\.05\],
+.light .border-white\/\[0\.06\],
+.light .border-white\/\[0\.07\],
+.light .border-white\/\[0\.08\],
+.light .border-white\/\[0\.09\]       { border-color: rgba(0,0,0,0.08) !important; }
+.light .border-white\/10              { border-color: rgba(0,0,0,0.1) !important; }
+.light .border-white\/20              { border-color: rgba(0,0,0,0.15) !important; }
+
+/* ── Text ── */
+.light .text-white                    { color: #0f172a !important; }
+.light .text-slate-300                { color: #334155 !important; }
+.light .text-slate-400                { color: #475569 !important; }
+.light .text-slate-500                { color: #64748b !important; }
+.light .text-slate-600                { color: #94a3b8 !important; }
+.light .text-slate-700                { color: #cbd5e1 !important; }
+
+/* ── Inputs ── */
+.light input {
+  background-color: rgba(0,0,0,0.04) !important;
+  color: #0f172a !important;
+  border-color: rgba(0,0,0,0.1) !important;
+}
+.light input::placeholder            { color: #94a3b8 !important; }
+
+/* ── Tooltip bg ── */
+.light .bg-slate-800.border-white\/10 { background-color: #fff !important; }
+
+/* ── Analysis spinner track ── */
+.light .border-slate-700              { border-color: #cbd5e1 !important; }
+.light .border-slate-800              { border-color: #e2e8f0 !important; }
+
+/* ── Month selector unselected pills ── */
+.light .border-white\/\[0\.07\].bg-white\/\[0\.02\] {
+  background-color: rgba(0,0,0,0.04) !important;
+  border-color: rgba(0,0,0,0.1) !important;
 }

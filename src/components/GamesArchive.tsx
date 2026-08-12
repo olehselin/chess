@@ -752,6 +752,16 @@ export const GamesArchive: React.FC = () => {
   const [resultFilter, setResultFilter] = useState<ResultFilter>('all');
   const [sortBy, setSortBy] = useState<SortKey>('date');
   const [searchQuery, setSearchQuery] = useState('');
+  const [isDark, setIsDark] = useState(() => {
+    const stored = localStorage.getItem('chess-theme');
+    return stored ? stored === 'dark' : true;
+  });
+
+  const toggleTheme = () => setIsDark((d) => {
+    const next = !d;
+    localStorage.setItem('chess-theme', next ? 'dark' : 'light');
+    return next;
+  });
 
   // Monthly blunder stats
   const [monthlyStats, setMonthlyStats] = useState<MonthlyBlunderStat[]>([]);
@@ -1083,7 +1093,7 @@ export const GamesArchive: React.FC = () => {
   // ── Render early states
   if (loadingArchives) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#0d0f14]">
+      <div className={`flex min-h-screen items-center justify-center bg-[#0d0f14] ${isDark ? '' : 'light'}`}>
         <div className="text-center">
           <div className="text-5xl mb-4 animate-bounce">♟</div>
           <p className="text-slate-500 text-sm">Завантаження архівів…</p>
@@ -1093,7 +1103,7 @@ export const GamesArchive: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-[#0d0f14] text-white">
+    <div className={`min-h-screen bg-[#0d0f14] text-white ${isDark ? '' : 'light'}`}>
       {/* ── Sticky header ── */}
       <div className="border-b border-white/[0.04] bg-[#0d0f14]/95 backdrop-blur-sm sticky top-0 z-10">
         <div className="mx-auto max-w-3xl px-4 py-3.5 flex items-center gap-4">
@@ -1104,6 +1114,23 @@ export const GamesArchive: React.FC = () => {
               <p className="text-xs text-slate-500 leading-tight">@{USERNAME}</p>
             </div>
           </div>
+
+          {/* Theme toggle */}
+          <button
+            onClick={toggleTheme}
+            title={isDark ? 'Світла тема' : 'Темна тема'}
+            className="flex h-7 w-7 items-center justify-center rounded-lg border border-white/[0.07] bg-white/[0.03] text-slate-500 hover:text-slate-300 hover:bg-white/[0.06] transition-all duration-150"
+          >
+            {isDark ? (
+              <svg viewBox="0 0 16 16" fill="currentColor" className="h-3.5 w-3.5">
+                <path d="M8 11a3 3 0 1 1 0-6 3 3 0 0 1 0 6zm0 1a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM8 0a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-1 0v-1A.5.5 0 0 1 8 0zm0 13a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-1 0v-1A.5.5 0 0 1 8 13zm8-5a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1 0-1h1a.5.5 0 0 1 .5.5zM3 8a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1 0-1h1A.5.5 0 0 1 3 8zm10.657-5.657a.5.5 0 0 1 0 .707l-.707.707a.5.5 0 0 1-.707-.707l.707-.707a.5.5 0 0 1 .707 0zm-9.193 9.193a.5.5 0 0 1 0 .707l-.707.707a.5.5 0 0 1-.707-.707l.707-.707a.5.5 0 0 1 .707 0zm9.193 2.121a.5.5 0 0 1-.707 0l-.707-.707a.5.5 0 0 1 .707-.707l.707.707a.5.5 0 0 1 0 .707zM4.464 4.465a.5.5 0 0 1-.707 0l-.707-.707a.5.5 0 0 1 .707-.707l.707.707a.5.5 0 0 1 0 .707z"/>
+              </svg>
+            ) : (
+              <svg viewBox="0 0 16 16" fill="currentColor" className="h-3.5 w-3.5">
+                <path d="M6 .278a.768.768 0 0 1 .08.858 7.208 7.208 0 0 0-.878 3.46c0 4.021 3.278 7.277 7.318 7.277.527 0 1.04-.055 1.533-.16a.787.787 0 0 1 .81.316.733.733 0 0 1-.031.893A8.349 8.349 0 0 1 8.344 16C3.734 16 0 12.286 0 7.71 0 4.266 2.114 1.312 5.124.06A.752.752 0 0 1 6 .278z"/>
+              </svg>
+            )}
+          </button>
 
           {/* Stockfish status */}
           <div className="flex items-center gap-1.5">
