@@ -176,9 +176,12 @@ const GameCard: React.FC<GameCardProps> = ({ game, analysis, onAnalyze }) => {
           )}
           {analysis.status === 'analyzing' && (
             <div className="flex flex-col items-center gap-1">
-              <div className="h-5 w-5 rounded-full border-2 border-[#81b64c]/40 border-t-[#81b64c] animate-spin" />
+              <div className="relative h-6 w-6">
+                <div className="absolute inset-0 rounded-full border-2 border-[#81b64c]/20" />
+                <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-[#81b64c] animate-spin" />
+              </div>
               {analysis.total > 0 && (
-                <span className="text-[10px] text-slate-600">
+                <span className="text-[10px] text-[#81b64c]/70 tabular-nums font-mono">
                   {analysis.progress}/{analysis.total}
                 </span>
               )}
@@ -891,14 +894,26 @@ export const GamesArchive: React.FC = () => {
 
           {/* Auto-analysis progress for current month */}
           {autoProgress !== null && autoProgress.done < autoProgress.total && sfStatus === 'ready' && (
-            <div className="flex items-center gap-2 text-xs text-slate-500">
-              <div className="h-1 w-20 rounded-full bg-slate-800 overflow-hidden">
-                <div
-                  className="h-full bg-[#81b64c] transition-all duration-500"
-                  style={{ width: `${(autoProgress.done / autoProgress.total) * 100}%` }}
-                />
+            <div className="flex items-center gap-2">
+              {/* Spinning indicator */}
+              <div className="relative h-4 w-4 flex-shrink-0">
+                <div className="absolute inset-0 rounded-full border-2 border-[#81b64c]/20" />
+                <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-[#81b64c] animate-spin" />
               </div>
-              <span className="tabular-nums">{autoProgress.done}/{autoProgress.total}</span>
+              <div className="flex flex-col leading-none gap-0.5">
+                <span className="text-[10px] text-[#81b64c]/90 font-medium">Аналізується…</span>
+                <div className="flex items-center gap-1.5">
+                  <div className="h-1 w-16 rounded-full bg-slate-800 overflow-hidden">
+                    <div
+                      className="h-full bg-[#81b64c] transition-all duration-500"
+                      style={{ width: `${(autoProgress.done / autoProgress.total) * 100}%` }}
+                    />
+                  </div>
+                  <span className="text-[10px] text-slate-500 tabular-nums font-mono">
+                    {autoProgress.done}/{autoProgress.total}
+                  </span>
+                </div>
+              </div>
             </div>
           )}
           {autoProgress !== null && autoProgress.done === autoProgress.total && autoProgress.total > 0 && !bgArchiveLabel && (
@@ -907,9 +922,15 @@ export const GamesArchive: React.FC = () => {
 
           {/* Background multi-month progress */}
           {bgArchiveLabel && (
-            <div className="flex items-center gap-1.5 text-xs text-slate-600">
-              <div className="h-1.5 w-1.5 rounded-full bg-slate-600 animate-pulse" />
-              <span className="truncate max-w-[120px]">{bgArchiveLabel}</span>
+            <div className="flex items-center gap-2">
+              <div className="relative h-3.5 w-3.5 flex-shrink-0">
+                <div className="absolute inset-0 rounded-full border-[1.5px] border-slate-700" />
+                <div className="absolute inset-0 rounded-full border-[1.5px] border-transparent border-t-slate-500 animate-spin" />
+              </div>
+              <div className="flex flex-col leading-none">
+                <span className="text-[10px] text-slate-500">Фоновий аналіз</span>
+                <span className="text-[10px] text-slate-600 truncate max-w-[100px]">{bgArchiveLabel}</span>
+              </div>
             </div>
           )}
 
@@ -1003,22 +1024,50 @@ export const GamesArchive: React.FC = () => {
           </div>
         )}
 
-        {/* Games list */}
-        {!loadingGames && filteredGames.length > 0 && (
-          <>
-            <p className="text-xs text-slate-700 mb-3">{filteredGames.length} партій</p>
-            <div className="space-y-2">
-              {filteredGames.map((g) => (
-                <GameCard
-                  key={g.processed.url}
-                  game={g.processed}
-                  analysis={analysisMap[g.processed.url] ?? defaultAnalysis()}
-                  onAnalyze={() => handleManualAnalyze(g.processed.url, g.pgn)}
-                />
-              ))}
-            </div>
-          </>
-        )}
+        {/* Games list — split by time class */}
+        {!loadingGames && filteredGames.length > 0 && (() => {
+          const rapidGames = filteredGames.filter((g) => g.processed.timeClass === 'rapid');
+          const blitzGames = filteredGames.filter((g) => g.processed.timeClass === 'blitz');
+          const otherGames = filteredGames.filter(
+            (g) => g.processed.timeClass !== 'rapid' && g.processed.timeClass !== 'blitz',
+          );
+
+          const renderSection = (
+            label: string,
+            icon: string,
+            iconCls: string,
+            games: typeof filteredGames,
+          ) =>
+            games.length > 0 ? (
+              <div key={label} className="mb-8">
+                <div className="flex items-center gap-2 mb-3">
+                  <span className={`text-base leading-none ${iconCls}`}>{icon}</span>
+                  <h2 className="text-sm font-semibold text-slate-300">{label}</h2>
+                  <span className="ml-1 rounded-full bg-white/[0.05] px-2 py-0.5 text-[10px] text-slate-500 font-mono">
+                    {games.length}
+                  </span>
+                </div>
+                <div className="space-y-2">
+                  {games.map((g) => (
+                    <GameCard
+                      key={g.processed.url}
+                      game={g.processed}
+                      analysis={analysisMap[g.processed.url] ?? defaultAnalysis()}
+                      onAnalyze={() => handleManualAnalyze(g.processed.url, g.pgn)}
+                    />
+                  ))}
+                </div>
+              </div>
+            ) : null;
+
+          return (
+            <>
+              {renderSection('Rapid', '⏱', 'text-blue-400', rapidGames)}
+              {renderSection('Blitz', '⚡', 'text-amber-400', blitzGames)}
+              {renderSection('Інші', '🎮', 'text-slate-400', otherGames)}
+            </>
+          );
+        })()}
 
         {/* Empty */}
         {!loadingGames && !error && filteredGames.length === 0 && rawGames.length > 0 && (
