@@ -517,7 +517,12 @@ const BlundersByMonthPanel: React.FC<{
     const hasAny = rows.some((r) => r.tc.totalGames > 0);
     if (!hasAny) return null;
 
-    const maxB = Math.max(...rows.map((r) => r.tc.totalBlunders), 1);
+    const maxB = Math.max(
+      ...rows.map((r) =>
+        r.tc.analyzedGames > 0 ? r.tc.totalBlunders / r.tc.analyzedGames : 0,
+      ),
+      0.01, // avoid division by zero
+    );
 
     return (
       <div className="mb-4">
@@ -533,14 +538,17 @@ const BlundersByMonthPanel: React.FC<{
             if (r.tc.totalGames === 0) {
               return <div key={r.archiveUrl} className="flex-1" />;
             }
-            const pct = (r.tc.totalBlunders / maxB) * 100;
+            const avgPerGame = r.tc.analyzedGames > 0
+              ? r.tc.totalBlunders / r.tc.analyzedGames
+              : 0;
+            const pct = (avgPerGame / maxB) * 100;
             const avgStr = r.tc.analyzedGames > 0
-              ? (r.tc.totalBlunders / r.tc.analyzedGames).toFixed(1)
+              ? avgPerGame.toFixed(1)
               : '—';
             const color =
-              r.tc.totalBlunders === 0
+              avgPerGame === 0
                 ? 'bg-emerald-500/60'
-                : r.tc.totalBlunders / Math.max(r.tc.analyzedGames, 1) >= 2
+                : avgPerGame >= 2
                 ? 'bg-rose-500/70'
                 : 'bg-[#81b64c]/70';
             return (
